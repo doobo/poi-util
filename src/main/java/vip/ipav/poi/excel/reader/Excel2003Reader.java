@@ -211,7 +211,7 @@ public class Excel2003Reader implements HSSFListener {
                 curRow = thisRow = lrec.getRow();
                 thisColumn = lrec.getColumn();
                 value = lrec.getValue().trim();
-                value = value.equals("") ? " " : value;
+                value = value.equals("") ? null : value;
                 this.rowList.add(thisColumn, value);
                 break;
             case LabelSSTRecord.sid:  //单元格为字符串类型
@@ -219,21 +219,21 @@ public class Excel2003Reader implements HSSFListener {
                 curRow = thisRow = lsrec.getRow();
                 thisColumn = lsrec.getColumn();
                 if (sstRecord == null) {
-                    rowList.add(thisColumn, " ");
+                    rowList.add(thisColumn, null);
                 } else {
                     value = sstRecord
                             .getString(lsrec.getSSTIndex()).toString().trim();
-                    value = value.equals("") ? " " : value;
+                    value = value.equals("") ? null : value;
                     rowList.add(thisColumn, value);
                 }
                 break;
-            case NumberRecord.sid:  //单元格为数字类型
+            case NumberRecord.sid:  //单元格为数字类型(含日期类型)
                 NumberRecord numrec = (NumberRecord) record;
                 curRow = thisRow = numrec.getRow();
                 thisColumn = numrec.getColumn();
                 value = formatListener.formatNumberDateCell(numrec).trim();
-                value = value.equals("") ? " " : value;
-                // 向容器加入列值
+                value = value.equals("")?null : value;
+                // 向容器加入列
                 rowList.add(thisColumn, value);
                 break;
             default:

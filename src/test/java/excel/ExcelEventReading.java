@@ -19,7 +19,7 @@ public class ExcelEventReading {
     @Test
     public void readExcel2007() throws Exception{
         //读取文件
-        Excel2007Reader excel2007Reader = new Excel2007Reader(1,1,"D:/test.xlsx");
+        Excel2007Reader excel2007Reader = new Excel2007Reader(1,"D:/test.xlsx");
 
         excel2007Reader.processOneSheet(1);
         //excel2007Reader.processOneSheet(2);
@@ -34,7 +34,7 @@ public class ExcelEventReading {
 
     @Test
     public void readExcel2003() throws Exception{
-       Excel2003Reader excel2003Reader = new Excel2003Reader(1,4,"d:/test.xls");
+       Excel2003Reader excel2003Reader = new Excel2003Reader(1,"d:/test.xls");
 //       excel2003Reader.processAllSheets();
         excel2003Reader.processOneSheet(1);
        Iterator it = excel2003Reader.getAllValueList().iterator();

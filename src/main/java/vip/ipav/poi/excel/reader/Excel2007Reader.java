@@ -12,8 +12,12 @@ import java.util.List;
 import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.openxml4j.opc.PackageAccess;
+import org.apache.poi.ss.usermodel.BuiltinFormats;
+import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.xssf.eventusermodel.XSSFReader;
 import org.apache.poi.xssf.model.SharedStringsTable;
+import org.apache.poi.xssf.model.StylesTable;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.apache.poi.xssf.usermodel.XSSFRichTextString;
 import org.xml.sax.Attributes;
 import org.xml.sax.ContentHandler;
@@ -26,13 +30,14 @@ import org.xml.sax.helpers.XMLReaderFactory;
 /**
  * 事件驱动模式处理Excel，针对xlsx文件
  * 只匹配普通非图表类的电子表格
- * 能区分空单元格及行内合并的单元格
- * 空单元格以null表示，合并的右边以空字符串表示
+ * 空单元格以null表示
  */
 public class Excel2007Reader {
 
     //获取数据源，可支持path，InputStream
     private OPCPackage pkg = null;
+
+    private static StylesTable stylesTable;
     // 开始读数据的行数
     private int beginRow;
     // 结束读数据的行数
@@ -41,23 +46,28 @@ public class Excel2007Reader {
     private final static String RID = "rId";
     private List<List<Object>> allValueList = new ArrayList<>();
 
-    public Excel2007Reader(int beginRow,String path) throws InvalidFormatException {
+    //用一个enum表示单元格可能的数据类型
+    enum CellDataType {
+        BOOL, ERROR, FORMULA, INLINESTR, SSTINDEX, NUMBER, DATE, NULL
+    }
+
+    public Excel2007Reader(int beginRow, String path) throws InvalidFormatException {
         this.beginRow = beginRow;
         this.open(path);
     }
 
-    public Excel2007Reader(int beginRow,InputStream in) throws InvalidFormatException,java.io.IOException {
+    public Excel2007Reader(int beginRow, InputStream in) throws InvalidFormatException, java.io.IOException {
         this.beginRow = beginRow;
         this.open(in);
     }
 
-    public Excel2007Reader(int beginRow,int rows,String path) throws InvalidFormatException {
+    public Excel2007Reader(int beginRow, int rows, String path) throws InvalidFormatException {
         this.beginRow = beginRow;
         this.endRow = this.beginRow + rows - 1;
         this.open(path);
     }
 
-    public Excel2007Reader(int beginRow,int rows,InputStream in) throws InvalidFormatException,java.io.IOException {
+    public Excel2007Reader(int beginRow, int rows, InputStream in) throws InvalidFormatException, java.io.IOException {
         this.beginRow = beginRow;
         this.endRow = this.beginRow + rows - 1;
         this.open(in);
@@ -67,26 +77,28 @@ public class Excel2007Reader {
         this.pkg = OPCPackage.open(path, PackageAccess.READ);
     }
 
-    public void open(InputStream in) throws InvalidFormatException,java.io.IOException{
+    public void open(InputStream in) throws InvalidFormatException, java.io.IOException {
         this.pkg = OPCPackage.open(in);
     }
 
     /**
      * 读取指定表id的数据
+     *
      * @param rId rId1,rId2对应sheet1和sheet2
      * @throws Exception
      */
     public void processOneSheet(Integer rId) throws Exception {
         InputStream sheet = null;
-        rId = rId==null?1:rId;
-        if(this.pkg == null){
+        rId = rId == null ? 1 : rId;
+        if (this.pkg == null) {
             throw new RuntimeException("未设置数据源，请使用open设置对应的数据源");
         }
         try {
             XSSFReader r = new XSSFReader(pkg);
+            stylesTable = r.getStylesTable();
             SharedStringsTable sst = r.getSharedStringsTable();
             XMLReader parser = fetchSheetParser(sst);
-            sheet = r.getSheet(RID+rId);
+            sheet = r.getSheet(RID + rId);
             InputSource sheetSource = new InputSource(sheet);
             parser.parse(sheetSource);
         } catch (Exception e) {
@@ -100,14 +112,16 @@ public class Excel2007Reader {
 
     /**
      * 读取文件里面的所有数据
+     *
      * @throws Exception
      */
     public void processAllSheets() throws Exception {
         XSSFReader r = new XSSFReader(pkg);
+        stylesTable = r.getStylesTable();
         SharedStringsTable sst = r.getSharedStringsTable();
         XMLReader parser = fetchSheetParser(sst);
         Iterator<InputStream> sheets = r.getSheetsData();
-        while(sheets.hasNext()) {
+        while (sheets.hasNext()) {
             InputStream sheet = sheets.next();
             InputSource sheetSource = new InputSource(sheet);
             parser.parse(sheetSource);
@@ -153,6 +167,7 @@ public class Excel2007Reader {
                 }
                 // 当前单元格的位置
                 ref = attributes.getValue("r");
+                this.setNextDataType(attributes);
 
                 int column = getColumn(attributes);
                 if (column < beginRow || (endRow > 0 && column > endRow)) {
@@ -162,6 +177,7 @@ public class Excel2007Reader {
                     if (name.equals("row")) {
                         rowValueList = new ArrayList<>();
                         allValueList.add(rowValueList);
+                        lastName = null;
                     }
                     String cellType = attributes.getValue("t");
                     if (cellType != null && cellType.equals("s")) {
@@ -174,19 +190,23 @@ public class Excel2007Reader {
             lastContents = "";
         }
 
+        private String lastName;
+
         public void endElement(String uri, String localName, String name) throws SAXException {
             if (validRow) {
-                if (isString) {
+                if (lastName != null && lastName.equals("c") && name.equals("c")) {
+                    rowValueList.add("");
+                } else if (isString) {
                     int idx = Integer.parseInt(lastContents);
                     lastContents = new XSSFRichTextString(sst.getEntryAt(idx)).toString();
                     isString = false;
                     validRow = false;
                     if (name.equals("v")) {//匹配字符串
-                        rowValueList.add(lastContents);
+                        rowValueList.add(this.getDataValue(lastContents.trim(), ""));
                     }
                 } else {
-                    if (name.equals("c")) {//匹配非字符串或合并的非空单元格
-                        rowValueList.add(lastContents);
+                    if (name.equals("c")) {//匹配非字符串(数字、空)或合并的非空单元格
+                        rowValueList.add(this.getDataValue(lastContents.trim(), ""));
                     }
                 }
 
@@ -219,10 +239,112 @@ public class Excel2007Reader {
                     }
                 }
             }
+            lastName = name;
+        }
+
+        private CellDataType nextDataType = CellDataType.SSTINDEX;
+        private final DataFormatter formatter = new DataFormatter();
+        private short formatIndex;
+        private String formatString;
+
+        /**
+         * 根据element属性设置数据类型
+         *
+         * @param attributes
+         */
+        public void setNextDataType(Attributes attributes) {
+
+            nextDataType = CellDataType.NUMBER;
+            formatIndex = -1;
+            formatString = null;
+            String cellType = attributes.getValue("t");
+            String cellStyleStr = attributes.getValue("s");
+            if ("b".equals(cellType)) {
+                nextDataType = CellDataType.BOOL;
+            } else if ("e".equals(cellType)) {
+                nextDataType = CellDataType.ERROR;
+            } else if ("inlineStr".equals(cellType)) {
+                nextDataType = CellDataType.INLINESTR;
+            } else if ("s".equals(cellType)) {
+                nextDataType = CellDataType.SSTINDEX;
+            } else if ("str".equals(cellType)) {
+                nextDataType = CellDataType.FORMULA;
+            }
+            if (cellStyleStr != null) {
+                int styleIndex = Integer.parseInt(cellStyleStr);
+                XSSFCellStyle style = stylesTable.getStyleAt(styleIndex);
+                formatIndex = style.getDataFormat();
+                formatString = style.getDataFormatString();
+                if ("m/d/yy" == formatString) {
+                    nextDataType = CellDataType.DATE;
+                    //full format is "yyyy-MM-dd hh:mm:ss.SSS";
+                    formatString = "m/d/yy";
+                }
+                if (formatString == null) {
+                    nextDataType = CellDataType.NULL;
+                    formatString = BuiltinFormats.getBuiltinFormat(formatIndex);
+                }
+            }
+        }
+
+        /**
+         * 根据数据类型获取数据
+         *
+         * @param value
+         * @param thisStr
+         * @return
+         */
+        public String getDataValue(String value, String thisStr) {
+            if(value == null || value.isEmpty()){
+                return "";
+            }
+            switch (nextDataType) {
+                //这几个的顺序不能随便交换，交换了很可能会导致数据错误
+                case BOOL:
+                    char first = value.charAt(0);
+                    thisStr = first == '0' ? "FALSE" : "TRUE";
+                    break;
+                case ERROR:
+                    thisStr = "\"ERROR:" + value.toString() + '"';
+                    break;
+                case FORMULA:
+                    thisStr = '"' + value.toString() + '"';
+                    break;
+                case INLINESTR:
+                    XSSFRichTextString rtsi = new XSSFRichTextString(value.toString());
+                    thisStr = rtsi.toString();
+                    rtsi = null;
+                    break;
+                case SSTINDEX:
+                    String sstIndex = value.toString();
+                    thisStr = value.toString();
+                    break;
+                case NUMBER:
+                    if (formatString != null) {
+                        thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString).trim();
+                    } else {
+                        thisStr = value;
+                    }
+                    thisStr = thisStr.replace("_", "").trim();
+                    break;
+                case DATE:
+                    try {
+                        thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString);
+                    } catch (NumberFormatException ex) {
+                        thisStr = value.toString();
+                    }
+                    thisStr = thisStr.replace(" ", "");
+                    break;
+                default:
+                    thisStr = "";
+                    break;
+            }
+            return thisStr;
         }
 
         /**
          * 计算两个单元格之间的单元格数目(同一行)
+         *
          * @param ref
          * @param preRef
          * @return
@@ -245,6 +367,7 @@ public class Excel2007Reader {
 
         /**
          * 字符串的填充
+         *
          * @param str
          * @param len
          * @param let
