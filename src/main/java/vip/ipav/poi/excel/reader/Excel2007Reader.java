@@ -278,7 +278,7 @@ public class Excel2007Reader {
                 if ("m/d/yy" == formatString) {
                     nextDataType = CellDataType.DATE;
                     //full format is "yyyy-MM-dd hh:mm:ss.SSS";
-                    formatString = "m/d/yy";
+                    formatString = "yyyy-MM-dd";
                 }
                 if (formatString == null) {
                     nextDataType = CellDataType.NULL;
@@ -329,6 +329,7 @@ public class Excel2007Reader {
                     break;
                 case DATE:
                     try {
+                        System.out.println(formatIndex);
                         thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString);
                     } catch (NumberFormatException ex) {
                         thisStr = value.toString();

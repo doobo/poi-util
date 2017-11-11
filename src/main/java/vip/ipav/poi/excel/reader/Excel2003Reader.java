@@ -9,8 +9,10 @@ import org.apache.poi.hssf.eventusermodel.dummyrecord.LastCellOfRowDummyRecord;
 import org.apache.poi.hssf.eventusermodel.dummyrecord.MissingCellDummyRecord;
 import org.apache.poi.hssf.model.HSSFFormulaParser;
 import org.apache.poi.hssf.record.*;
+import org.apache.poi.hssf.usermodel.HSSFDateUtil;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
+import org.apache.poi.ss.usermodel.DataFormatter;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -49,6 +51,9 @@ public class Excel2003Reader implements HSSFListener {
     private Integer readSheetIndex = null;
     private BoundSheetRecord[] orderedBSRs;
     private ArrayList boundSheetRecords = new ArrayList();
+
+    //日期格式处理
+    private final DataFormatter formatter = new DataFormatter();
 
     // For handling formulas with string results
     private int nextRow;
@@ -231,8 +236,15 @@ public class Excel2003Reader implements HSSFListener {
                 NumberRecord numrec = (NumberRecord) record;
                 curRow = thisRow = numrec.getRow();
                 thisColumn = numrec.getColumn();
-                value = formatListener.formatNumberDateCell(numrec).trim();
-                value = value.equals("")?null : value;
+                //HSSFDateUtil.isCellDateFormatted(numrec);
+                if("m/d/yy" == formatListener.getFormatString(numrec)){
+                    //full format is "yyyy-MM-dd hh:mm:ss.SSS";
+                    value = formatter.formatRawCellContents(numrec.getValue(),
+                            formatListener.getFormatIndex(numrec), "yyyy-MM-dd");
+                }else{
+                    value = formatListener.formatNumberDateCell(numrec).trim();
+                    value = value.equals("")?"":value;
+                }
                 // 向容器加入列
                 rowList.add(thisColumn, value);
                 break;
