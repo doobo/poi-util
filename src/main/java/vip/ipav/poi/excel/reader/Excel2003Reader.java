@@ -1,7 +1,7 @@
 package vip.ipav.poi.excel.reader;
 
 /**
- * Created by 89003522 on 2017/11/2.
+ * Created by doobo@foxmail.com on 2017/11/2.
  */
 
 import org.apache.poi.hssf.eventusermodel.*;
@@ -9,7 +9,6 @@ import org.apache.poi.hssf.eventusermodel.dummyrecord.LastCellOfRowDummyRecord;
 import org.apache.poi.hssf.eventusermodel.dummyrecord.MissingCellDummyRecord;
 import org.apache.poi.hssf.model.HSSFFormulaParser;
 import org.apache.poi.hssf.record.*;
-import org.apache.poi.hssf.usermodel.HSSFDateUtil;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -22,7 +21,8 @@ import java.util.List;
 
 /**
  * 抽象Excel2003读取器，通过实现HSSFListener监听器，采用事件驱动模式解析excel2003
- * 中的内容，遇到特定事件才会触发，大大减少了内存的使用。
+ * 中的内容，遇到特定事件才会触发，大大减少了内存的使用
+ * 空单元格以null表示,填写后再删除的单元格用空字符表示
  */
 public class Excel2003Reader implements HSSFListener {
     private int minColumns = -1;
@@ -138,6 +138,34 @@ public class Excel2003Reader implements HSSFListener {
         int thisColumn = -1;
         String thisStr = null;
         String value = null;
+
+        // 行结束时的操作
+        if (record instanceof LastCellOfRowDummyRecord) {
+            if (minColumns > 0) {
+                // 列值重新置空
+                if (lastColumnNumber == -1) {
+                    lastColumnNumber = 0;
+                }
+            }
+            lastColumnNumber = -1;
+            // 每行结束时,执行的数据，临时解决办法
+            if (curRow + 1 < beginRow || (endRow > 0 && curRow + 1 > endRow)) {
+                //不保存数据，临时解决办法
+                rowList.clear();
+            } else {
+                if (readSheetIndex != null && readSheetIndex > 0) {
+                    if (readSheetIndex - 1 == sheetIndex) {
+                        this.allValueList.add(rowList);
+                        this.rowList = new ArrayList<>();
+                    }
+                    rowList.clear();
+                } else {
+                    this.allValueList.add(rowList);
+                    this.rowList = new ArrayList<>();
+                }
+            }
+            return;
+        }
 
         switch (record.getSid()) {
             case BoundSheetRecord.sid:
@@ -270,32 +298,5 @@ public class Excel2003Reader implements HSSFListener {
             lastRowNumber = thisRow;
         if (thisColumn > -1)
             lastColumnNumber = thisColumn;
-
-        // 行结束时的操作
-        if (record instanceof LastCellOfRowDummyRecord) {
-            if (minColumns > 0) {
-                // 列值重新置空
-                if (lastColumnNumber == -1) {
-                    lastColumnNumber = 0;
-                }
-            }
-            lastColumnNumber = -1;
-            // 每行结束时,执行的数据，临时解决办法
-            if (curRow + 1 < beginRow || (endRow > 0 && curRow + 1 > endRow)) {
-                //不保存数据，临时解决办法
-                rowList.clear();
-            } else {
-                if (readSheetIndex != null && readSheetIndex > 0) {
-                    if (readSheetIndex - 1 == sheetIndex) {
-                        this.allValueList.add(rowList);
-                        this.rowList = new ArrayList<>();
-                    }
-                    rowList.clear();
-                } else {
-                    this.allValueList.add(rowList);
-                    this.rowList = new ArrayList<>();
-                }
-            }
-        }
     }
 }

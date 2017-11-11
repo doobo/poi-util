@@ -1,7 +1,7 @@
 package vip.ipav.poi.excel.reader;
 
 /**
- * Created by 89003522 on 2017/11/2.
+ * Created by doobo@foxmail.com on 2017/11/2.
  */
 
 import java.io.InputStream;
@@ -30,7 +30,7 @@ import org.xml.sax.helpers.XMLReaderFactory;
 /**
  * 事件驱动模式处理Excel，针对xlsx文件
  * 只匹配普通非图表类的电子表格
- * 空单元格以null表示
+ * 空单元格以null表示,填写后再删除的单元格用空字符表示
  */
 public class Excel2007Reader {
 
@@ -329,7 +329,6 @@ public class Excel2007Reader {
                     break;
                 case DATE:
                     try {
-                        System.out.println(formatIndex);
                         thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString);
                     } catch (NumberFormatException ex) {
                         thisStr = value.toString();

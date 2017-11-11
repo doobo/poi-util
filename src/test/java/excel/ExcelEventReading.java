@@ -34,8 +34,8 @@ public class ExcelEventReading {
 
     @Test
     public void readExcel2003() throws Exception{
-       Excel2003Reader excel2003Reader = new Excel2003Reader(1,"d:/test.xls");
-//       excel2003Reader.processAllSheets();
+       Excel2003Reader excel2003Reader = new Excel2003Reader(1,2,"d:/test.xls");
+       //excel2003Reader.processAllSheets();
         excel2003Reader.processOneSheet(1);
        Iterator it = excel2003Reader.getAllValueList().iterator();
        while (it.hasNext()) {
